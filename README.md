@@ -73,6 +73,14 @@ en GitHub automáticamente (pestaña **Actions → Artifacts**, o en
 Necesitas **Android Studio** (gratis) o el SDK de Android por línea de
 comandos. El teléfono debe tener Android 12 o superior.
 
+### Sin compilar nada (lo más rápido)
+
+Cada cambio en `android/` dispara el workflow **build-apk** en GitHub
+Actions: entra en la pestaña *Actions* del repo → última ejecución →
+descarga el artifact **camstream-apk** (`app-debug.apk`). Pásalo al
+teléfono (Drive, WhatsApp, cable…), tócalo e instálalo — solo hay que
+permitir "instalar de orígenes desconocidos" cuando Android lo pregunte.
+
 ### Con Android Studio (lo más fácil)
 
 1. Abre Android Studio → *Open* → elige la carpeta `android/`.
@@ -85,7 +93,6 @@ comandos. El teléfono debe tener Android 12 o superior.
 
 ```bash
 cd android
-gradle wrapper --gradle-version 8.7   # solo la primera vez
 ./gradlew assembleDebug
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
