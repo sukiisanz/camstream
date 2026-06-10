@@ -8,6 +8,8 @@ on:
     branches: [main]
     paths: ["receiver/**", ".github/workflows/build-receiver.yml"]
     tags: ["v*"]
+  pull_request:
+    paths: ["receiver/**", ".github/workflows/build-receiver.yml"]
   workflow_dispatch:
 
 jobs:
