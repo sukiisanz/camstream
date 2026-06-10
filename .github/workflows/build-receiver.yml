@@ -1,0 +1,51 @@
+# Compila los ejecutables del receptor para Windows y Linux.
+# Se descargan desde la pestaña Actions → run → Artifacts,
+# y al crear un tag v* se publican en una Release.
+name: build-receiver
+
+on:
+  push:
+    branches: [main]
+    paths: ["receiver/**", ".github/workflows/build-receiver.yml"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: camstream-receiver-windows
+            binary: dist/camstream-receiver.exe
+          - os: ubuntu-latest
+            artifact: camstream-receiver-linux
+            binary: dist/camstream-receiver
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: receiver
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller -r requirements.txt
+
+      - name: Build executable
+        working-directory: receiver
+        run: python -m PyInstaller --onefile --console --name camstream-receiver camstream_receiver.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: receiver/${{ matrix.binary }}
+
+      - name: Publish release (solo tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: receiver/${{ matrix.binary }}

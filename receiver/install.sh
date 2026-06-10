@@ -55,7 +55,7 @@ if ! modprobe v4l2loopback 2>/dev/null; then
 fi
 
 echo "==> Instalando el daemon y el servicio systemd (de usuario)"
-install -m 0755 "$SCRIPT_DIR/camstream-receiver" /usr/local/bin/camstream-receiver
+install -m 0755 "$SCRIPT_DIR/camstream_receiver.py" /usr/local/bin/camstream-receiver
 install -m 0644 "$SCRIPT_DIR/camstream-receiver.service" /etc/systemd/user/camstream-receiver.service
 
 echo

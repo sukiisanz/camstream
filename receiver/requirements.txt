@@ -1,0 +1,6 @@
+# Dependencias del receptor cuando se usa como script Python.
+# En Linux con GStreamer no hace falta ninguna (avahi-browse hace el mDNS);
+# estas son para Windows o para el backend pyvirtualcam.
+zeroconf>=0.131
+numpy>=1.26
+pyvirtualcam>=0.11
