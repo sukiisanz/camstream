@@ -1,18 +1,19 @@
 # CamStream 📱→💻
 
-Convierte tu teléfono Android en una webcam para Fedora Linux, por WiFi o
-por cable USB. Sin apps de pago, sin cuentas, sin nube: todo pasa dentro de
-tu casa, de tu teléfono a tu ordenador.
+Convierte tu teléfono Android en una webcam para **Linux (Fedora)** o
+**Windows**, por WiFi o por cable USB. Sin apps de pago, sin cuentas, sin
+nube: todo pasa dentro de tu casa, de tu teléfono a tu ordenador.
 
 ```
 ┌─────────────────┐   H.264 sobre RTSP/TCP    ┌──────────────────────────┐
-│  Teléfono       │  ────────────────────────▶ │  Fedora                  │
+│  Teléfono       │  ────────────────────────▶ │  PC (Fedora o Windows)   │
 │  (app CamStream)│   WiFi  o  USB (adb)       │  camstream-receiver      │
 │                 │                            │     │                    │
 │  cámara → H.264 │                            │     ▼                    │
-│  servidor RTSP  │                            │  /dev/video10 (virtual)  │
-│  anuncio mDNS   │                            │     │                    │
-└─────────────────┘                            │     ▼                    │
+│  servidor RTSP  │                            │  cámara virtual          │
+│  anuncio mDNS   │                            │  Linux: /dev/video10     │
+└─────────────────┘                            │  Windows: OBS VirtualCam │
+                                               │     ▼                    │
                                                │  Zoom / Meet / Teams     │
                                                └──────────────────────────┘
 ```
@@ -27,10 +28,11 @@ Imagina que tu teléfono es una **emisora de radio**, pero de video:
 3. El teléfono "emite" ese video por un canal llamado RTSP, y además grita
    por la red local *"¡estoy aquí, soy CamStream!"* (eso es mDNS, lo mismo
    que usa Chromecast para que lo encuentres sin escribir números).
-4. En Fedora, un programita (`camstream-receiver`) escucha ese grito,
+4. En tu PC, un programita (`camstream-receiver`) escucha ese grito,
    sintoniza la emisora, descomprime el video y lo mete en una
-   **cámara de mentira** (`/dev/video10`) que el sistema crea con un módulo
-   llamado v4l2loopback.
+   **cámara de mentira**: en Linux es `/dev/video10` (creada por el módulo
+   v4l2loopback) y en Windows es la "OBS Virtual Camera" (el driver gratuito
+   que instala OBS Studio).
 5. Zoom, Meet y Teams no saben que es de mentira: ven una webcam llamada
    **CamStream** y la usan como cualquier otra.
 
@@ -51,13 +53,20 @@ camstream/
 │       ├── rtsp/RtspServer.kt     # servidor RTSP embebido (TCP)
 │       ├── rtsp/RtpH264Packetizer.kt  # RTP según RFC 6184
 │       └── net/NsdAnnouncer.kt    # anuncio mDNS (_camstream._tcp)
-└── receiver/                 # Receptor para Fedora
-    ├── camstream-receiver         # daemon Python (autodescubre + pipeline)
-    ├── camstream-receiver.service # unidad systemd (de usuario)
-    ├── install.sh                 # instalador (dnf, v4l2loopback, etc.)
+└── receiver/                 # Receptor multiplataforma
+    ├── camstream_receiver.py      # daemon Python (autodescubre + pipeline)
+    ├── camstream-receiver.service # unidad systemd (de usuario, Linux)
+    ├── install.sh                 # instalador Fedora (dnf, v4l2loopback…)
     ├── uninstall.sh
+    ├── requirements.txt           # deps Python (Windows / pyvirtualcam)
+    ├── build-windows.ps1          # genera camstream-receiver.exe
+    ├── build-linux.sh             # genera el binario Linux
     └── test/loopback-test.sh      # prueba la cámara virtual sin teléfono
 ```
+
+Además, `.github/workflows/build-receiver.yml` compila los dos ejecutables
+en GitHub automáticamente (pestaña **Actions → Artifacts**, o en
+**Releases** al crear un tag `v*`).
 
 ## Parte 1: compilar e instalar la app Android
 
@@ -95,7 +104,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 4. La pantalla puede apagarse de notificaciones, pero no cierres la app
    mientras transmites (Android corta la cámara a las apps cerradas).
 
-## Parte 2: instalar el receptor en Fedora
+## Parte 2 (Fedora): instalar el receptor
 
 ```bash
 cd receiver
@@ -144,18 +153,109 @@ camstream-receiver --latency 100         # buffer extra si hay cortes
 camstream-receiver --backend ffmpeg      # forzar ffmpeg en vez de GStreamer
 ```
 
+## Parte 2 (Windows): instalar el receptor
+
+En Windows la cámara virtual la pone el driver de **OBS Studio** (gratis y
+open source); nuestro receptor la alimenta con el video del teléfono.
+
+1. Instala los tres requisitos (una sola vez, desde PowerShell):
+
+   ```powershell
+   winget install OBSProject.OBSStudio    # trae el driver "OBS Virtual Camera"
+   winget install Gyan.FFmpeg             # descomprime el video H.264
+   winget install Google.PlatformTools    # adb, para el modo USB
+   ```
+
+   > Abre OBS una vez y pulsa "Iniciar cámara virtual" para que el driver
+   > quede registrado; luego ciérralo, ya no hace falta más.
+
+2. Descarga `camstream-receiver.exe` (de la pestaña *Actions/Releases* del
+   repo) **o** compílalo tú misma:
+
+   ```powershell
+   cd receiver
+   powershell -ExecutionPolicy Bypass -File build-windows.ps1
+   # → dist\camstream-receiver.exe
+   ```
+
+3. Ejecútalo (doble clic o desde PowerShell para ver los mensajes):
+
+   ```powershell
+   .\camstream-receiver.exe
+   ```
+
+4. En Zoom/Meet/Teams elige la cámara **OBS Virtual Camera**.
+
+Si prefieres no compilar nada y tienes Python instalado:
+
+```powershell
+cd receiver
+pip install -r requirements.txt
+python camstream_receiver.py
+```
+
+## Ejecutables listos para distribuir
+
+- **Automático**: cada cambio en `receiver/` dispara el workflow
+  `build-receiver` en GitHub Actions, que deja `camstream-receiver.exe`
+  (Windows) y `camstream-receiver` (Linux) como *artifacts*. Si creas un
+  tag `v1.0.0`, se publican en una *Release*.
+- **A mano**: `receiver/build-windows.ps1` en Windows y
+  `receiver/build-linux.sh` en Linux (PyInstaller, un solo archivo, sin
+  necesitar Python en la máquina de destino).
+
+Ojo: el ejecutable lleva dentro Python, zeroconf y pyvirtualcam, pero
+**no** ffmpeg/OBS/adb — esos se instalan aparte (paso 1 de cada sección).
+
 ## Parte 3: prueba end-to-end
 
 1. Teléfono y PC en la **misma red WiFi** (ojo: el "aislamiento de
    clientes" de algunos routers de invitados lo impide).
 2. Abre CamStream en el teléfono → **Iniciar**.
-3. En Fedora: `camstream-receiver`. En unos segundos debería decir
-   *"Teléfono encontrado por WiFi"* y *"la cámara virtual está activa"*.
-4. Abre Zoom/Meet/Teams → Configuración → Cámara → **CamStream**.
+3. En el PC: `camstream-receiver` (Fedora) o `camstream-receiver.exe`
+   (Windows). En unos segundos debería decir *"Teléfono encontrado por
+   WiFi"* y *"la cámara virtual está activa"*.
+4. Abre Zoom/Meet/Teams → Configuración → Cámara → **CamStream**
+   (en Windows se llama **OBS Virtual Camera**).
 
 **Modo USB**: conecta el cable, acepta el diálogo de depuración USB en el
 teléfono, y arranca el receptor. Si el WiFi no encuentra nada en 10 s
 (configurable), pasa solo a USB. En la app verás *● USB conectado*.
+
+## La interfaz
+
+**En el teléfono** (la app es una sola pantalla, en horizontal):
+
+```
+┌──────────────────────────────────────────────┐
+│                                              │
+│        [ preview en vivo de la cámara ]      │
+│                                              │
+├──────────────────────────────────────────────┤
+│   ● WiFi conectado — rtsp://192.168.1.50:8554/cam   │
+├──────────────────────┬───────────────────────┤
+│      [ Detener ]     │   [ Cambiar cámara ]  │
+└──────────────────────┴───────────────────────┘
+```
+
+La línea de estado dice en cada momento: *Detenido*, *Esperando receptor
+(anunciado por mDNS)*, *● WiFi conectado* o *● USB conectado*, siempre con
+la URL del stream por si quieres conectarte a mano (VLC, OBS…).
+
+**En el PC** no hay ventana: es un programa de consola/servicio que se
+explica solo:
+
+```
+[camstream] Buscando el teléfono por mDNS (_camstream._tcp) durante 10s…
+[camstream] Teléfono encontrado por WiFi: CamStream-Pixel en 192.168.1.50:8554
+[camstream] Recibiendo rtsp://192.168.1.50:8554/cam
+[camstream] Pipeline: GStreamer (decodificador openh264dec)
+[camstream] Conectado: la cámara virtual está activa. Ctrl+C para salir.
+```
+
+La "interfaz" real del lado PC es la propia app de reuniones: en Zoom,
+Meet o Teams simplemente eliges la cámara **CamStream** / **OBS Virtual
+Camera** en su selector de siempre.
 
 ## Latencia
 
@@ -203,3 +303,5 @@ Todo el código es propio y open source (misma licencia que el repo); las
 | Chrome/Meet no lista CamStream | El módulo debe cargarse con `exclusive_caps=1` (install.sh ya lo pone). Reinicia el navegador. |
 | Video verde o corrupto al conectar | Espera 1 s (siguiente keyframe) o reinicia la transmisión en la app. |
 | La app deja de emitir al cambiar de app | Android restringe la cámara en segundo plano; mantén CamStream en pantalla o en pantalla dividida. |
+| (Windows) "No se pudo abrir la cámara virtual" | Instala OBS Studio y arranca su "cámara virtual" una vez para registrar el driver. |
+| (Windows) no encuentra el teléfono por WiFi | El firewall de Windows pregunta la primera vez: permite el acceso a redes privadas. |
