@@ -1,0 +1,12 @@
+[Unit]
+Description=CamStream receiver (teléfono Android → /dev/video10)
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/camstream-receiver
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
