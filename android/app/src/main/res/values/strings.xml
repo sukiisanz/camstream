@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CamStream</string>
+    <string name="start">Iniciar</string>
+    <string name="stop">Detener</string>
+    <string name="switch_camera">Cambiar cámara</string>
+    <string name="status_stopped">Detenido</string>
+    <string name="notification_channel">Transmisión CamStream</string>
+    <string name="notification_title">CamStream transmitiendo</string>
+    <string name="notification_text">La cámara se está emitiendo por RTSP</string>
+</resources>
