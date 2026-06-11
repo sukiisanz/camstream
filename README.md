@@ -165,6 +165,11 @@ camstream-receiver --backend ffmpeg      # forzar ffmpeg en vez de GStreamer
 En Windows la cámara virtual la pone el driver de **OBS Studio** (gratis y
 open source); nuestro receptor la alimenta con el video del teléfono.
 
+> **Opción exprés:** abre PowerShell **como administrador** y ejecuta
+> `powershell -ExecutionPolicy Bypass -File receiver\setup-windows.ps1` —
+> hace solo todo el paso 1 (instala OBS, ffmpeg y adb, y registra el
+> driver de cámara virtual sin abrir OBS). Luego salta al paso 2.
+
 1. Instala los tres requisitos (una sola vez, desde PowerShell):
 
    ```powershell
