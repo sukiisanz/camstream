@@ -29,11 +29,15 @@ instálalo (acepta "orígenes desconocidos" si lo pregunta).
 
 **Windows:**
 
-1. Abre PowerShell como administrador y ejecuta
-   `powershell -ExecutionPolicy Bypass -File receiver\setup-windows.ps1`
-   (instala solo todo lo necesario).
-2. Descarga `camstream-receiver.exe`: pestaña **Actions** → última
-   ejecución de **build-receiver** → artifact **camstream-receiver-windows**.
+1. Descarga el artifact **camstream-receiver-windows**: pestaña
+   **Actions** → última ejecución de **build-receiver** (trae dos
+   programas; el tuyo es **camstream-receiver-gui.exe**, el otro es la
+   versión de terminal).
+2. Doble clic a `camstream-receiver-gui.exe`.
+3. La primera vez, pulsa **"Instalar dependencias"** (acepta el aviso
+   de administrador): instala OBS, ffmpeg y adb él solo. Al terminar,
+   cierra y reabre el programa.
+4. Pulsa **Conectar**: encuentra el teléfono solo, por WiFi o USB.
 
 **Fedora / Linux:**
 
@@ -68,8 +72,8 @@ systemctl --user enable --now camstream-receiver
 ## Uso diario
 
 1. **Teléfono**: abre CamStream → **Iniciar** (apóyalo en horizontal).
-2. **PC**: doble clic a `camstream-receiver.exe` (en Linux ni eso, si lo
-   dejaste como servicio).
+2. **PC**: abre **CamStream Receiver** (la ventana) y pulsa
+   **Conectar** — o usa la versión de terminal si la prefieres.
 3. **Zoom/Meet/Teams** → Configuración → Cámara → **CamStream** (en
    Windows se llama **OBS Virtual Camera**).
 
