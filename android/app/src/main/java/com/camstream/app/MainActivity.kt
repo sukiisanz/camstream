@@ -21,9 +21,12 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
+import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.RadioGroup
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,6 +36,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.switchmaterial.SwitchMaterial
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -52,12 +56,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSwitchCamera: ImageButton
     private lateinit var btnQr: ImageButton
     private lateinit var btnSettings: ImageButton
+    private lateinit var btnBattery: ImageButton
 
     private var service: StreamService? = null
     private var statusJob: Job? = null
     private var previewSurface: Surface? = null
     private var pulse: ObjectAnimator? = null
-    private var dimHintShown = false
+    private var streamRotation = 0
+    private var streamMirror = false
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
@@ -98,6 +104,7 @@ class MainActivity : AppCompatActivity() {
         btnSwitchCamera = findViewById(R.id.btnSwitchCamera)
         btnQr = findViewById(R.id.btnQr)
         btnSettings = findViewById(R.id.btnSettings)
+        btnBattery = findViewById(R.id.btnBattery)
 
         previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(texture: SurfaceTexture, w: Int, h: Int) {
@@ -130,22 +137,16 @@ class MainActivity : AppCompatActivity() {
                 // para sobrevivir si la Activity pasa a segundo plano.
                 ContextCompat.startForegroundService(this, Intent(this, StreamService::class.java))
                 s.startStreaming()
-                if (!dimHintShown) {
-                    dimHintShown = true
-                    Toast.makeText(this, R.string.dim_hint, Toast.LENGTH_LONG).show()
-                }
             }
         }
 
         btnSwitchCamera.setOnClickListener { service?.switchCamera() }
         btnQr.setOnClickListener { showQrDialog() }
         statusPill.setOnClickListener { showQrDialog() }
-        btnSettings.setOnClickListener { showQualityDialog() }
+        btnSettings.setOnClickListener { showSettingsDialog() }
+        btnBattery.setOnClickListener { showBatteryDialog() }
 
-        // Modo ahorro: tocar el video atenúa, tocar la capa negra vuelve
-        previewView.setOnClickListener {
-            if (service?.status?.value?.running == true) setDim(true)
-        }
+        // Modo ahorro: tocar la capa negra recupera el brillo
         dimScrim.setOnClickListener { setDim(false) }
 
         requestPermissionsAndBind()
@@ -159,20 +160,69 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showQualityDialog() {
+    private fun showBatteryDialog() {
+        if (service?.status?.value?.running != true) {
+            Toast.makeText(this, "Inicia la transmisión primero", Toast.LENGTH_SHORT).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.battery_title)
+            .setMessage(R.string.battery_message)
+            .setPositiveButton(R.string.battery_confirm) { _, _ -> setDim(true) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showSettingsDialog() {
         val s = service ?: return
-        val options = arrayOf(
-            getString(R.string.quality_1080),
-            getString(R.string.quality_720),
-            getString(R.string.quality_480),
-        )
+        val view = layoutInflater.inflate(R.layout.dialog_settings, null)
+        val rgQuality = view.findViewById<RadioGroup>(R.id.rgQuality)
+        val rgRotation = view.findViewById<RadioGroup>(R.id.rgRotation)
+        val swMirror = view.findViewById<SwitchMaterial>(R.id.swMirror)
+        val sbBrightness = view.findViewById<SeekBar>(R.id.sbBrightness)
+        val sbContrast = view.findViewById<SeekBar>(R.id.sbContrast)
+        val sbSaturation = view.findViewById<SeekBar>(R.id.sbSaturation)
+        val btnReset = view.findViewById<Button>(R.id.btnResetImage)
+
+        val qualityIds = intArrayOf(R.id.rbQ1080, R.id.rbQ720, R.id.rbQ480)
+        val rotationIds = intArrayOf(R.id.rbRot0, R.id.rbRot90, R.id.rbRot180, R.id.rbRot270)
+
+        // Estado actual antes de enganchar listeners, para no disparar cambios
+        rgQuality.check(qualityIds[s.qualityIndex])
+        rgRotation.check(rotationIds[s.rotationIndex])
+        swMirror.isChecked = s.mirror
+        sbBrightness.progress = s.brightnessPct
+        sbContrast.progress = s.contrastPct
+        sbSaturation.progress = s.saturationPct
+
+        rgQuality.setOnCheckedChangeListener { _, id -> s.setQuality(qualityIds.indexOf(id)) }
+        rgRotation.setOnCheckedChangeListener { _, id -> s.setRotation(rotationIds.indexOf(id)) }
+        swMirror.setOnCheckedChangeListener { _, on -> s.setMirror(on) }
+        val seekListener = object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    s.setImageAdjust(
+                        sbBrightness.progress, sbContrast.progress, sbSaturation.progress,
+                    )
+                }
+            }
+            override fun onStartTrackingTouch(bar: SeekBar?) {}
+            override fun onStopTrackingTouch(bar: SeekBar?) {}
+        }
+        sbBrightness.setOnSeekBarChangeListener(seekListener)
+        sbContrast.setOnSeekBarChangeListener(seekListener)
+        sbSaturation.setOnSeekBarChangeListener(seekListener)
+        btnReset.setOnClickListener {
+            sbBrightness.progress = 100
+            sbContrast.progress = 100
+            sbSaturation.progress = 100
+            s.setImageAdjust(100, 100, 100)
+        }
+
         AlertDialog.Builder(this)
             .setTitle(R.string.settings_title)
-            .setSingleChoiceItems(options, s.qualityIndex) { dialog, which ->
-                s.setQuality(which)
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
+            .setView(view)
+            .setPositiveButton(R.string.close, null)
             .show()
     }
 
@@ -238,6 +288,15 @@ class MainActivity : AppCompatActivity() {
             matrix.postRotate(90f * (rotation - 2), centerX, centerY)
         } else if (rotation == Surface.ROTATION_180) {
             matrix.postRotate(180f, centerX, centerY)
+        }
+        // Refleja en el preview el espejo/giro que se aplica al stream
+        if (streamMirror) matrix.postScale(-1f, 1f, centerX, centerY)
+        if (streamRotation != 0) {
+            matrix.postRotate(streamRotation.toFloat(), centerX, centerY)
+            if (streamRotation % 180 != 0 && viewWidth > viewHeight && viewHeight > 0) {
+                val scale = viewHeight.toFloat() / viewWidth.toFloat()
+                matrix.postScale(scale, scale, centerX, centerY)
+            }
         }
         previewView.setTransform(matrix)
     }
@@ -308,6 +367,14 @@ class MainActivity : AppCompatActivity() {
             )
         } else if (dimScrim.visibility == View.VISIBLE) {
             setDim(false)
+        }
+
+        if (status.rotationDeg != streamRotation || status.mirror != streamMirror) {
+            streamRotation = status.rotationDeg
+            streamMirror = status.mirror
+            if (previewView.width > 0) {
+                configureTransform(previewView.width, previewView.height)
+            }
         }
     }
 
