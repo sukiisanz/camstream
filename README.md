@@ -1,3 +1,5 @@
+<p align="center"><img src="CamStream-logo.png" width="160" alt="CamStream"></p>
+
 # CamStream 📱→💻
 
 Convierte tu teléfono Android en una **webcam para tu PC** (Windows o

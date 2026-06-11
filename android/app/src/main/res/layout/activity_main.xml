@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/cs_background">
@@ -54,7 +53,7 @@
             android:text="@string/status_stopped" />
     </LinearLayout>
 
-    <!-- Botonera flotante inferior -->
+    <!-- Botonera flotante inferior, con el degradado de marca -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -63,46 +62,51 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <ImageButton
             android:id="@+id/btnQr"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:layout_marginEnd="20dp"
-            app:fabSize="mini"
-            app:srcCompat="@drawable/ic_qr"
-            app:tint="@color/cs_on_primary"
-            app:backgroundTint="@color/cs_primary"
+            android:background="@drawable/bg_fab_gradient"
+            android:elevation="6dp"
+            android:scaleType="center"
+            android:src="@drawable/ic_qr"
+            android:tint="@color/cs_on_primary"
             android:contentDescription="@string/qr_button" />
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <ImageButton
             android:id="@+id/btnStartStop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            app:srcCompat="@drawable/ic_play"
-            app:tint="@color/cs_on_primary"
-            app:backgroundTint="@color/cs_primary"
+            android:layout_width="76dp"
+            android:layout_height="76dp"
+            android:background="@drawable/bg_fab_gradient"
+            android:elevation="8dp"
+            android:scaleType="center"
+            android:src="@drawable/ic_play"
+            android:tint="@color/cs_on_primary"
             android:contentDescription="@string/start" />
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <ImageButton
             android:id="@+id/btnSwitchCamera"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:layout_marginStart="20dp"
-            app:fabSize="mini"
-            app:srcCompat="@drawable/ic_flip"
-            app:tint="@color/cs_on_primary"
-            app:backgroundTint="@color/cs_primary"
+            android:background="@drawable/bg_fab_gradient"
+            android:elevation="6dp"
+            android:scaleType="center"
+            android:src="@drawable/ic_flip"
+            android:tint="@color/cs_on_primary"
             android:contentDescription="@string/switch_camera" />
 
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
+        <ImageButton
             android:id="@+id/btnSettings"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
             android:layout_marginStart="20dp"
-            app:fabSize="mini"
-            app:srcCompat="@drawable/ic_tune"
-            app:tint="@color/cs_on_primary"
-            app:backgroundTint="@color/cs_primary"
+            android:background="@drawable/bg_fab_gradient"
+            android:elevation="6dp"
+            android:scaleType="center"
+            android:src="@drawable/ic_tune"
+            android:tint="@color/cs_on_primary"
             android:contentDescription="@string/settings_button" />
     </LinearLayout>
 
