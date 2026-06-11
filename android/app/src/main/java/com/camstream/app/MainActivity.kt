@@ -21,6 +21,7 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -32,7 +33,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -48,10 +48,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statsText: TextView
     private lateinit var liveDot: View
     private lateinit var dimScrim: View
-    private lateinit var btnStartStop: FloatingActionButton
-    private lateinit var btnSwitchCamera: FloatingActionButton
-    private lateinit var btnQr: FloatingActionButton
-    private lateinit var btnSettings: FloatingActionButton
+    private lateinit var btnStartStop: ImageButton
+    private lateinit var btnSwitchCamera: ImageButton
+    private lateinit var btnQr: ImageButton
+    private lateinit var btnSettings: ImageButton
 
     private var service: StreamService? = null
     private var statusJob: Job? = null
