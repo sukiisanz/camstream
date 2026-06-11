@@ -1,0 +1,2 @@
+#!/usr/bin/sh
+exec python3 /usr/share/camstream-receiver/camstream_gui.py "$@"

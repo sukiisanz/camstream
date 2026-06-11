@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=CamStream Receiver
+Comment=Usa tu teléfono como webcam en Zoom, Meet o Teams
+Comment[en]=Use your phone as a webcam in Zoom, Meet or Teams
+Exec=camstream-receiver-gui
+Icon=camstream-receiver
+Terminal=false
+Categories=AudioVideo;Video;Utility;
+Keywords=webcam;camera;phone;rtsp;

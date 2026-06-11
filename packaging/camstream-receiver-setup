@@ -1,0 +1,43 @@
+#!/usr/bin/bash
+# Configura el sistema para CamStream Receiver. Se ejecuta como root
+# (la GUI lo lanza con pkexec). Idempotente: se puede repetir sin daño.
+set -u
+
+echo "== CamStream: instalando dependencias del sistema =="
+
+if command -v dnf >/dev/null 2>&1; then
+    # Fedora: v4l2loopback vive en RPM Fusion (repo libre oficial de facto)
+    . /etc/os-release
+    if ! rpm -q rpmfusion-free-release >/dev/null 2>&1; then
+        echo "-- Activando el repositorio RPM Fusion (free)"
+        dnf install -y \
+            "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${VERSION_ID}.noarch.rpm" \
+            || echo "Aviso: no se pudo activar RPM Fusion"
+    fi
+    echo "-- Instalando paquetes"
+    dnf install -y akmod-v4l2loopback gstreamer1-plugins-good \
+        gstreamer1-plugins-bad-free gstreamer1-libav android-tools \
+        avahi-tools python3-zeroconf || true
+    # akmods compila el módulo para el kernel actual
+    command -v akmods >/dev/null 2>&1 && akmods || true
+elif command -v apt-get >/dev/null 2>&1; then
+    echo "-- Instalando paquetes (apt)"
+    apt-get update
+    apt-get install -y v4l2loopback-dkms gstreamer1.0-tools \
+        gstreamer1.0-plugins-good gstreamer1.0-libav adb \
+        avahi-utils python3-zeroconf || true
+fi
+
+echo "-- Configurando la cámara virtual (carga automática al arrancar)"
+install -d /etc/modules-load.d /etc/modprobe.d
+echo v4l2loopback > /etc/modules-load.d/camstream.conf
+echo "options v4l2loopback video_nr=10 card_label=CamStream exclusive_caps=1" \
+    > /etc/modprobe.d/camstream.conf
+
+if modprobe v4l2loopback video_nr=10 card_label=CamStream exclusive_caps=1; then
+    echo "== Listo: /dev/video10 creado =="
+else
+    echo "== Casi listo: el módulo se está compilando (akmods)."
+    echo "   Si /dev/video10 no aparece en un par de minutos, reinicia el equipo. =="
+fi
+exit 0

@@ -1,4 +1,4 @@
-# Compila los ejecutables del receptor para Windows y Linux.
+# Compila el receptor para Windows (exe), Linux (tar.gz + RPM con GUI).
 # Se descargan desde la pestaña Actions → run → Artifacts,
 # y al crear un tag v* se publican en una Release.
 name: build-receiver
@@ -6,13 +6,28 @@ name: build-receiver
 on:
   push:
     branches: [main]
-    paths: ["receiver/**", ".github/workflows/build-receiver.yml"]
+    paths: ["receiver/**", "packaging/**", ".github/workflows/build-receiver.yml"]
     tags: ["v*"]
   pull_request:
-    paths: ["receiver/**", ".github/workflows/build-receiver.yml"]
+    paths: ["receiver/**", "packaging/**", ".github/workflows/build-receiver.yml"]
   workflow_dispatch:
 
 jobs:
+  check-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK bindings
+        run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-gtk-3.0
+
+      - name: Syntax check
+        run: python3 -m py_compile receiver/camstream_receiver.py receiver/camstream_gui.py
+
+      - name: Import check (GUI)
+        working-directory: receiver
+        run: python3 -c "import camstream_gui"
+
   build:
     strategy:
       matrix:
@@ -22,7 +37,7 @@ jobs:
             binary: dist/camstream-receiver.exe
           - os: ubuntu-latest
             artifact: camstream-receiver-linux
-            binary: dist/camstream-receiver
+            binary: dist/camstream-receiver-linux.tar.gz
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +56,13 @@ jobs:
         working-directory: receiver
         run: python -m PyInstaller --onefile --console --name camstream-receiver camstream_receiver.py
 
+      # El ZIP de los artifacts pierde el permiso de ejecución; un tar.gz
+      # dentro del ZIP lo conserva (tar -xzf y listo).
+      - name: Pack Linux binary (preserva permisos)
+        if: runner.os == 'Linux'
+        working-directory: receiver
+        run: tar -czf dist/camstream-receiver-linux.tar.gz -C dist camstream-receiver
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -51,3 +73,29 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: receiver/${{ matrix.binary }}
+
+  rpm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rpmbuild
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Build RPM
+        run: |
+          rpmbuild -bb packaging/camstream-receiver.spec \
+            --define "_topdir $PWD/rpmbuild" \
+            --define "srcdir $PWD"
+          ls -l rpmbuild/RPMS/noarch/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: camstream-receiver-rpm
+          path: rpmbuild/RPMS/noarch/*.rpm
+
+      - name: Publish release (solo tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rpmbuild/RPMS/noarch/*.rpm

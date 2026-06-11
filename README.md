@@ -37,9 +37,25 @@ instálalo (acepta "orígenes desconocidos" si lo pregunta).
 
 **Fedora / Linux:**
 
+1. Descarga el paquete: **Actions** → última ejecución de
+   **build-receiver** → artifact **camstream-receiver-rpm**.
+2. Instálalo: doble clic sobre el `.rpm`, o en terminal:
+   `sudo dnf install ./camstream-receiver-*.rpm`
+3. Abre **CamStream Receiver** desde el menú de aplicaciones.
+4. La primera vez, pulsa **"Instalar dependencias"** (pide tu
+   contraseña): deja configurada la cámara virtual y todo lo necesario.
+   Si lo pide, reinicia.
+5. Pulsa **Conectar**: encuentra el teléfono solo, por WiFi o USB.
+
+<details>
+<summary>Alternativa sin RPM (terminal)</summary>
+
+Descarga el artifact **camstream-receiver-linux**, y:
+
 ```bash
-cd receiver
-sudo ./install.sh
+tar -xzf camstream-receiver-linux.tar.gz
+cd receiver && sudo ./install.sh   # dependencias (una sola vez)
+./camstream-receiver
 ```
 
 Opcional, para que arranque solo al iniciar sesión:
@@ -47,6 +63,7 @@ Opcional, para que arranque solo al iniciar sesión:
 ```bash
 systemctl --user enable --now camstream-receiver
 ```
+</details>
 
 ## Uso diario
 
