@@ -261,24 +261,36 @@ def run_subprocess_pipeline(cmd):
 
 def probe_stream(url):
     """Pregunta a ffprobe el tamaño y los fps del stream."""
+    default = (1280, 720, 30)
     if not shutil.which("ffprobe"):
         log("ffprobe no encontrado; asumo 1280x720 a 30 fps")
-        return 1280, 720, 30
+        return default
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-rtsp_transport", "tcp",
              "-select_streams", "v:0",
-             "-show_entries", "stream=width,height,avg_frame_rate",
-             "-of", "csv=p=0", url],
+             "-show_entries", "stream=width,height,avg_frame_rate,r_frame_rate",
+             "-of", "default=noprint_wrappers=1", url],
             capture_output=True, text=True, timeout=15,
-        ).stdout.strip()
-        width_s, height_s, rate = out.split(",")[:3]
-        num, _, den = rate.partition("/")
-        fps = round(int(num) / int(den or 1)) if num.isdigit() else 30
-        return int(width_s), int(height_s), max(1, min(fps, 60))
-    except (ValueError, subprocess.TimeoutExpired):
-        log("No pude sondear el stream; asumo 1280x720 a 30 fps")
-        return 1280, 720, 30
+        ).stdout
+        info = dict(line.split("=", 1) for line in out.split() if "=" in line)
+
+        def parse_rate(rate):
+            # Los streams en vivo suelen anunciar "0/0": eso no es un fps válido
+            num, _, den = rate.partition("/")
+            try:
+                return round(int(num) / int(den or 1))
+            except (ValueError, ZeroDivisionError):
+                return 0
+
+        width = int(info.get("width", 0)) or default[0]
+        height = int(info.get("height", 0)) or default[1]
+        fps = (parse_rate(info.get("avg_frame_rate", "")) or
+               parse_rate(info.get("r_frame_rate", "")) or 30)
+        return width, height, max(1, min(fps, 60))
+    except Exception as e:
+        log(f"No pude sondear el stream ({e}); asumo 1280x720 a 30 fps")
+        return default
 
 
 def read_exact(stream, size):
@@ -403,4 +415,14 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        if IS_WINDOWS:
+            # que la ventana no se cierre sin dejar leer el error
+            input("\nError inesperado. Pulsa Enter para cerrar…")
+        sys.exit(1)
