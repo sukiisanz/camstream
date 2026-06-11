@@ -12,7 +12,6 @@ import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Matrix
-import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.os.Build
 import android.os.Bundle
@@ -70,8 +69,6 @@ class MainActivity : AppCompatActivity() {
     private var statusJob: Job? = null
     private var previewSurface: Surface? = null
     private var pulse: ObjectAnimator? = null
-    private var streamRotation = 0
-    private var streamMirror = false
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
@@ -349,44 +346,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * El TextureView pinta el buffer de la cámara tal cual sale del sensor
-     * (montado en vertical en casi todos los teléfonos): con la pantalla en
-     * horizontal hay que contra-rotarlo y reescalarlo, o se ve girado y
-     * estirado. Misma técnica que el ejemplo oficial camera2basic, con
-     * escala "fit" para ver el encuadre completo que se transmite.
+     * El buffer del preview ya llega derecho desde la etapa OpenGL (con
+     * giro, espejo, ajustes y rótulo aplicados): solo hay que encajarlo
+     * en la pantalla sin deformarlo.
      */
     private fun configureTransform(viewWidth: Int, viewHeight: Int) {
-        val rotation = if (Build.VERSION.SDK_INT >= 30) {
-            display?.rotation ?: Surface.ROTATION_0
-        } else {
-            @Suppress("DEPRECATION")
-            windowManager.defaultDisplay.rotation
-        }
+        if (viewWidth == 0 || viewHeight == 0) return
         val bufferW = 1280f
         val bufferH = 720f
+        val scale = minOf(viewWidth / bufferW, viewHeight / bufferH)
         val matrix = Matrix()
-        val viewRect = RectF(0f, 0f, viewWidth.toFloat(), viewHeight.toFloat())
-        val centerX = viewRect.centerX()
-        val centerY = viewRect.centerY()
-        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
-            val bufferRect = RectF(0f, 0f, bufferH, bufferW)
-            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY())
-            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL)
-            val scale = minOf(viewHeight / bufferH, viewWidth / bufferW)
-            matrix.postScale(scale, scale, centerX, centerY)
-            matrix.postRotate(90f * (rotation - 2), centerX, centerY)
-        } else if (rotation == Surface.ROTATION_180) {
-            matrix.postRotate(180f, centerX, centerY)
-        }
-        // Refleja en el preview el espejo/giro que se aplica al stream
-        if (streamMirror) matrix.postScale(-1f, 1f, centerX, centerY)
-        if (streamRotation != 0) {
-            matrix.postRotate(streamRotation.toFloat(), centerX, centerY)
-            if (streamRotation % 180 != 0 && viewWidth > viewHeight && viewHeight > 0) {
-                val scale = viewHeight.toFloat() / viewWidth.toFloat()
-                matrix.postScale(scale, scale, centerX, centerY)
-            }
-        }
+        matrix.setScale(
+            scale * bufferW / viewWidth,
+            scale * bufferH / viewHeight,
+            viewWidth / 2f,
+            viewHeight / 2f,
+        )
         previewView.setTransform(matrix)
     }
 
@@ -456,14 +431,6 @@ class MainActivity : AppCompatActivity() {
             )
         } else if (dimScrim.visibility == View.VISIBLE) {
             setDim(false)
-        }
-
-        if (status.rotationDeg != streamRotation || status.mirror != streamMirror) {
-            streamRotation = status.rotationDeg
-            streamMirror = status.mirror
-            if (previewView.width > 0) {
-                configureTransform(previewView.width, previewView.height)
-            }
         }
     }
 

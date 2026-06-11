@@ -48,6 +48,8 @@ class GlPipe(
     private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
     private var eglSurface: EGLSurface = EGL14.EGL_NO_SURFACE
+    private var eglConfig: EGLConfig? = null
+    private var previewEglSurface: EGLSurface = EGL14.EGL_NO_SURFACE
     private lateinit var surfaceTexture: SurfaceTexture
     private var textureId = 0
     private var program = 0
@@ -123,6 +125,7 @@ class GlPipe(
                 numConfigs[0] > 0
         ) { "Sin config EGL compatible" }
         val config = configs[0]!!
+        eglConfig = config
 
         eglContext = EGL14.eglCreateContext(
             eglDisplay, config, EGL14.EGL_NO_CONTEXT,
@@ -227,8 +230,39 @@ class GlPipe(
         }
     }
 
+    /**
+     * Superficie del preview de la Activity (o null al desaparecer). El
+     * preview se pinta con el MISMO resultado que recibe el encoder:
+     * giro, espejo, ajustes de imagen y rótulo incluidos.
+     */
+    fun setPreviewSurface(surface: Surface?) {
+        if (released) return
+        val latch = CountDownLatch(1)
+        handler.post {
+            try {
+                if (previewEglSurface != EGL14.EGL_NO_SURFACE) {
+                    EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
+                    EGL14.eglDestroySurface(eglDisplay, previewEglSurface)
+                    previewEglSurface = EGL14.EGL_NO_SURFACE
+                }
+                if (surface != null && surface.isValid) {
+                    previewEglSurface = EGL14.eglCreateWindowSurface(
+                        eglDisplay, eglConfig, surface, intArrayOf(EGL14.EGL_NONE), 0,
+                    ) ?: EGL14.EGL_NO_SURFACE
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("GlPipe", "Preview EGL falló", e)
+                previewEglSurface = EGL14.EGL_NO_SURFACE
+            } finally {
+                latch.countDown()
+            }
+        }
+        latch.await()
+    }
+
     private fun drawFrame() {
         if (released) return
+        EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
         surfaceTexture.updateTexImage()
         surfaceTexture.getTransformMatrix(texMatrix)
 
@@ -236,9 +270,43 @@ class GlPipe(
         if (mirror) Matrix.scaleM(mvpMatrix, 0, -1f, 1f, 1f)
         if (rotationDeg != 0) Matrix.rotateM(mvpMatrix, 0, rotationDeg.toFloat(), 0f, 0f, 1f)
 
+        // 1) al encoder (lo que se transmite)
         GLES20.glViewport(0, 0, outWidth, outHeight)
         GLES20.glClearColor(0f, 0f, 0f, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        renderScene()
+        EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, surfaceTexture.timestamp)
+        EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+
+        // 2) al preview del teléfono (misma imagen, encajada sin deformar)
+        val preview = previewEglSurface
+        if (preview != EGL14.EGL_NO_SURFACE &&
+            EGL14.eglMakeCurrent(eglDisplay, preview, preview, eglContext)
+        ) {
+            val size = IntArray(1)
+            EGL14.eglQuerySurface(eglDisplay, preview, EGL14.EGL_WIDTH, size, 0)
+            val pw = size[0]
+            EGL14.eglQuerySurface(eglDisplay, preview, EGL14.EGL_HEIGHT, size, 0)
+            val ph = size[0]
+            GLES20.glViewport(0, 0, pw, ph)
+            GLES20.glClearColor(0f, 0f, 0f, 1f)
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            val contentAspect = outWidth.toFloat() / outHeight
+            val surfaceAspect = pw.toFloat() / ph
+            var vx = 0; var vy = 0; var vw = pw; var vh = ph
+            if (surfaceAspect > contentAspect) {
+                vw = (ph * contentAspect).toInt(); vx = (pw - vw) / 2
+            } else {
+                vh = (pw / contentAspect).toInt(); vy = (ph - vh) / 2
+            }
+            GLES20.glViewport(vx, vy, vw, vh)
+            renderScene()
+            EGL14.eglSwapBuffers(eglDisplay, preview)
+        }
+    }
+
+    /** Dibuja el video con ajustes + el rótulo en el viewport ya fijado. */
+    private fun renderScene() {
         GLES20.glUseProgram(program)
 
         GLES20.glUniformMatrix4fv(uMvp, 1, false, mvpMatrix, 0)
@@ -261,9 +329,6 @@ class GlPipe(
         GLES20.glDisableVertexAttribArray(aTexCoord)
 
         drawOverlay()
-
-        EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, surfaceTexture.timestamp)
-        EGL14.eglSwapBuffers(eglDisplay, eglSurface)
     }
 
     private fun drawOverlay() {
@@ -301,6 +366,9 @@ class GlPipe(
                     eglDisplay, EGL14.EGL_NO_SURFACE,
                     EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT,
                 )
+                if (previewEglSurface != EGL14.EGL_NO_SURFACE) {
+                    EGL14.eglDestroySurface(eglDisplay, previewEglSurface)
+                }
                 if (eglSurface != EGL14.EGL_NO_SURFACE) {
                     EGL14.eglDestroySurface(eglDisplay, eglSurface)
                 }
