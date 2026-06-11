@@ -21,7 +21,9 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.view.WindowManager
+import android.graphics.drawable.GradientDrawable
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -57,6 +59,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnQr: ImageButton
     private lateinit var btnSettings: ImageButton
     private lateinit var btnBattery: ImageButton
+    private lateinit var btnOverlay: ImageButton
+
+    private val swatchColors = intArrayOf(
+        0xFFFFFFFF.toInt(), 0xFF000000.toInt(), 0xFF1A8CB1.toInt(), 0xFF2AADA8.toInt(),
+        0xFF41DE8F.toInt(), 0xFFFFB300.toInt(), 0xFFFF1744.toInt(), 0xFF9C27B0.toInt(),
+    )
 
     private var service: StreamService? = null
     private var statusJob: Job? = null
@@ -105,6 +113,7 @@ class MainActivity : AppCompatActivity() {
         btnQr = findViewById(R.id.btnQr)
         btnSettings = findViewById(R.id.btnSettings)
         btnBattery = findViewById(R.id.btnBattery)
+        btnOverlay = findViewById(R.id.btnOverlay)
 
         previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(texture: SurfaceTexture, w: Int, h: Int) {
@@ -145,6 +154,7 @@ class MainActivity : AppCompatActivity() {
         statusPill.setOnClickListener { showQrDialog() }
         btnSettings.setOnClickListener { showSettingsDialog() }
         btnBattery.setOnClickListener { showBatteryDialog() }
+        btnOverlay.setOnClickListener { showOverlayDialog() }
 
         // Modo ahorro: tocar la capa negra recupera el brillo
         dimScrim.setOnClickListener { setDim(false) }
@@ -224,6 +234,85 @@ class MainActivity : AppCompatActivity() {
             .setView(view)
             .setPositiveButton(R.string.close, null)
             .show()
+    }
+
+    private fun showOverlayDialog() {
+        val s = service ?: return
+        val view = layoutInflater.inflate(R.layout.dialog_overlay, null)
+        val swOverlay = view.findViewById<SwitchMaterial>(R.id.swOverlay)
+        val etName = view.findViewById<EditText>(R.id.etName)
+        val etRole = view.findViewById<EditText>(R.id.etRole)
+        val rgStyle = view.findViewById<RadioGroup>(R.id.rgStyle)
+        val rgPosition = view.findViewById<RadioGroup>(R.id.rgPosition)
+        val rowText = view.findViewById<LinearLayout>(R.id.rowTextColors)
+        val rowAccent = view.findViewById<LinearLayout>(R.id.rowAccentColors)
+
+        val styleIds = intArrayOf(
+            R.id.rbStyleClean, R.id.rbStyleBar, R.id.rbStylePill, R.id.rbStyleGradient,
+        )
+        val posIds = intArrayOf(R.id.rbPosLeft, R.id.rbPosCenter, R.id.rbPosRight)
+
+        swOverlay.isChecked = s.overlayEnabled
+        etName.setText(s.overlayName)
+        etRole.setText(s.overlayRole)
+        rgStyle.check(styleIds[s.overlayStyle])
+        rgPosition.check(posIds[s.overlayPosition])
+        var textColor = s.overlayTextColor
+        var accentColor = s.overlayAccentColor
+        buildSwatchRow(rowText, textColor) { textColor = it }
+        buildSwatchRow(rowAccent, accentColor) { accentColor = it }
+
+        AlertDialog.Builder(this)
+            .setTitle(R.string.overlay_title)
+            .setView(view)
+            .setPositiveButton(R.string.apply) { _, _ ->
+                s.setOverlayConfig(
+                    enabled = swOverlay.isChecked,
+                    name = etName.text.toString().trim(),
+                    role = etRole.text.toString().trim(),
+                    style = styleIds.indexOf(rgStyle.checkedRadioButtonId).coerceAtLeast(0),
+                    textColor = textColor,
+                    accentColor = accentColor,
+                    position = posIds.indexOf(rgPosition.checkedRadioButtonId).coerceAtLeast(0),
+                )
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** Fila de circulitos de color; el elegido se marca con borde blanco. */
+    private fun buildSwatchRow(row: LinearLayout, initial: Int, onPick: (Int) -> Unit) {
+        val density = resources.displayMetrics.density
+        val size = (32 * density).toInt()
+        val margin = (6 * density).toInt()
+        val stroke = (3 * density).toInt()
+        var selected = swatchColors.indexOf(initial).coerceAtLeast(0)
+        val views = mutableListOf<View>()
+
+        fun refresh() {
+            views.forEachIndexed { i, v ->
+                v.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(swatchColors[i])
+                    setStroke(stroke, if (i == selected) Color.WHITE else 0x40FFFFFF)
+                }
+            }
+        }
+
+        swatchColors.forEachIndexed { i, color ->
+            val v = View(this)
+            v.layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                setMargins(margin, 0, margin, 0)
+            }
+            v.setOnClickListener {
+                selected = i
+                onPick(color)
+                refresh()
+            }
+            views.add(v)
+            row.addView(v)
+        }
+        refresh()
     }
 
     private fun showQrDialog() {

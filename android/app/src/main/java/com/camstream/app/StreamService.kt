@@ -15,6 +15,7 @@ import android.util.Log
 import android.view.Surface
 import com.camstream.app.encoder.GlPipe
 import com.camstream.app.encoder.H264Encoder
+import com.camstream.app.encoder.OverlayFactory
 import com.camstream.app.net.NsdAnnouncer
 import com.camstream.app.rtsp.RtspServer
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -117,6 +118,54 @@ class StreamService : Service() {
         }
     }
 
+    // ---- Rótulo superpuesto (nombre y cargo sobre el video)
+    val overlayEnabled: Boolean get() = prefs.getBoolean(KEY_OV_ENABLED, false)
+    val overlayName: String get() = prefs.getString(KEY_OV_NAME, "") ?: ""
+    val overlayRole: String get() = prefs.getString(KEY_OV_ROLE, "") ?: ""
+    val overlayStyle: Int get() = prefs.getInt(KEY_OV_STYLE, OverlayFactory.STYLE_BAR)
+    val overlayTextColor: Int get() = prefs.getInt(KEY_OV_TEXT_COLOR, 0xFFFFFFFF.toInt())
+    val overlayAccentColor: Int get() = prefs.getInt(KEY_OV_ACCENT, 0xFF41DE8F.toInt())
+
+    /** 0 izquierda, 1 centro, 2 derecha (siempre abajo). */
+    val overlayPosition: Int get() = prefs.getInt(KEY_OV_POS, 0)
+
+    fun setOverlayConfig(
+        enabled: Boolean,
+        name: String,
+        role: String,
+        style: Int,
+        textColor: Int,
+        accentColor: Int,
+        position: Int,
+    ) {
+        prefs.edit()
+            .putBoolean(KEY_OV_ENABLED, enabled)
+            .putString(KEY_OV_NAME, name)
+            .putString(KEY_OV_ROLE, role)
+            .putInt(KEY_OV_STYLE, style)
+            .putInt(KEY_OV_TEXT_COLOR, textColor)
+            .putInt(KEY_OV_ACCENT, accentColor)
+            .putInt(KEY_OV_POS, position)
+            .apply()
+        refreshOverlay()
+    }
+
+    private fun refreshOverlay() {
+        val pipe = glPipe ?: return
+        if (!overlayEnabled || overlayName.isBlank()) {
+            pipe.setOverlay(null, 0)
+            return
+        }
+        pipe.setOverlay(
+            OverlayFactory.make(
+                this, overlayName, overlayRole,
+                overlayTextColor, overlayAccentColor, overlayStyle,
+                streamHeight = _status.value.height,
+            ),
+            overlayPosition,
+        )
+    }
+
     private fun restartIfRunning() {
         if (!_status.value.running) return
         teardownPipeline()
@@ -216,6 +265,7 @@ class StreamService : Service() {
                 mirror = mirror,
                 error = null,
             )
+            refreshOverlay()
         } catch (e: Exception) {
             Log.e(TAG, "No se pudo iniciar la transmisión", e)
             teardownPipeline()
@@ -340,6 +390,13 @@ class StreamService : Service() {
         private const val KEY_BRIGHTNESS = "brightness"
         private const val KEY_CONTRAST = "contrast"
         private const val KEY_SATURATION = "saturation"
+        private const val KEY_OV_ENABLED = "ov_enabled"
+        private const val KEY_OV_NAME = "ov_name"
+        private const val KEY_OV_ROLE = "ov_role"
+        private const val KEY_OV_STYLE = "ov_style"
+        private const val KEY_OV_TEXT_COLOR = "ov_text_color"
+        private const val KEY_OV_ACCENT = "ov_accent"
+        private const val KEY_OV_POS = "ov_pos"
         const val ACTION_STOP = "com.camstream.app.STOP"
     }
 }
