@@ -36,6 +36,10 @@ class StreamService : Service() {
         val localIp: String? = null,
         val port: Int = RtspServer.DEFAULT_PORT,
         val error: String? = null,
+        val width: Int = 1280,
+        val height: Int = 720,
+        val measuredFps: Int = 0,
+        val measuredKbps: Int = 0,
     )
 
     inner class LocalBinder : Binder() {
@@ -52,6 +56,53 @@ class StreamService : Service() {
     private var cameraEngine: CameraEngine? = null
     private var nsdAnnouncer: NsdAnnouncer? = null
     private var previewSurface: Surface? = null
+
+    private val prefs by lazy { getSharedPreferences("camstream", Context.MODE_PRIVATE) }
+
+    /** 0 = 1080p, 1 = 720p (defecto), 2 = 480p. */
+    val qualityIndex: Int get() = prefs.getInt(KEY_QUALITY, 1)
+
+    private fun qualityFor(index: Int): Triple<Int, Int, Int> = when (index) {
+        0 -> Triple(1920, 1080, 8_000_000)
+        2 -> Triple(848, 480, 2_500_000)
+        else -> Triple(1280, 720, 6_000_000)
+    }
+
+    fun setQuality(index: Int) {
+        if (index == qualityIndex) return
+        prefs.edit().putInt(KEY_QUALITY, index).apply()
+        if (_status.value.running) {
+            // Reinicia el pipeline con la nueva calidad
+            teardownPipeline()
+            _status.value = _status.value.copy(
+                running = false, clients = 0, usbClient = false,
+                mdnsRegistered = false, measuredFps = 0, measuredKbps = 0,
+            )
+            startStreaming()
+        }
+    }
+
+    // Estadísticas en vivo (fps y bitrate reales, ventana de 1 s)
+    private var statFrames = 0
+    private var statBytes = 0L
+    private var statWindowStart = 0L
+
+    private fun trackStats(bytes: Int) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (statWindowStart == 0L) statWindowStart = now
+        statFrames++
+        statBytes += bytes
+        val dt = now - statWindowStart
+        if (dt >= 1000) {
+            _status.value = _status.value.copy(
+                measuredFps = (statFrames * 1000 / dt).toInt(),
+                measuredKbps = (statBytes * 8 / dt).toInt(),
+            )
+            statFrames = 0
+            statBytes = 0
+            statWindowStart = now
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder = binder
 
@@ -74,9 +125,15 @@ class StreamService : Service() {
                 },
                 onKeyFrameRequest = { encoder?.requestKeyFrame() },
             )
+            val (width, height, bitrate) = qualityFor(qualityIndex)
+            statFrames = 0; statBytes = 0; statWindowStart = 0
             val newEncoder = H264Encoder(
+                width = width, height = height, bitrate = bitrate,
                 onSpsPps = { sps, pps -> server.setSpsPps(sps, pps) },
-                onFrame = { data, ptsUs, isKey -> server.broadcast(data, ptsUs, isKey) },
+                onFrame = { data, ptsUs, isKey ->
+                    trackStats(data.size)
+                    server.broadcast(data, ptsUs, isKey)
+                },
             )
             newEncoder.start()
             server.start()
@@ -95,6 +152,8 @@ class StreamService : Service() {
             _status.value = _status.value.copy(
                 running = true,
                 localIp = findLocalIp(),
+                width = width,
+                height = height,
                 error = null,
             )
         } catch (e: Exception) {
@@ -213,6 +272,7 @@ class StreamService : Service() {
         private const val TAG = "StreamService"
         private const val CHANNEL_ID = "camstream"
         private const val NOTIFICATION_ID = 1
+        private const val KEY_QUALITY = "quality"
         const val ACTION_STOP = "com.camstream.app.STOP"
     }
 }

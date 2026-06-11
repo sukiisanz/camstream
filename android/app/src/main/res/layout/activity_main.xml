@@ -1,46 +1,118 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@android:color/black">
+    android:background="@color/cs_background">
 
     <TextureView
         android:id="@+id/previewView"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_height="match_parent" />
 
+    <!-- Datos en vivo (resolución · fps · Mbps), esquina superior izquierda -->
     <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
+        android:id="@+id/statsText"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:padding="8dp"
-        android:gravity="center"
-        android:textColor="@android:color/white"
-        android:textSize="14sp"
-        android:text="@string/status_stopped" />
+        android:layout_gravity="top|start"
+        android:layout_margin="12dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:background="@drawable/bg_pill"
+        android:textColor="@color/cs_text"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:visibility="gone" />
 
+    <!-- Píldora de estado, arriba al centro (tocarla abre el QR) -->
     <LinearLayout
-        android:layout_width="match_parent"
+        android:id="@+id/statusPill"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_margin="12dp"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:background="@drawable/bg_pill"
         android:orientation="horizontal"
-        android:padding="8dp"
-        android:gravity="center">
+        android:gravity="center_vertical">
 
-        <Button
-            android:id="@+id/btnStartStop"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
+        <View
+            android:id="@+id/liveDot"
+            android:layout_width="10dp"
+            android:layout_height="10dp"
             android:layout_marginEnd="8dp"
-            android:text="@string/start" />
+            android:background="@drawable/dot" />
 
-        <Button
-            android:id="@+id/btnSwitchCamera"
-            android:layout_width="0dp"
-            android:layout_weight="1"
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/switch_camera" />
+            android:textColor="@color/cs_text"
+            android:textSize="13sp"
+            android:text="@string/status_stopped" />
     </LinearLayout>
-</LinearLayout>
+
+    <!-- Botonera flotante inferior -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnQr"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="20dp"
+            app:fabSize="mini"
+            app:srcCompat="@drawable/ic_qr"
+            app:tint="@color/cs_on_primary"
+            app:backgroundTint="@color/cs_primary"
+            android:contentDescription="@string/qr_button" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnStartStop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:srcCompat="@drawable/ic_play"
+            app:tint="@color/cs_on_primary"
+            app:backgroundTint="@color/cs_primary"
+            android:contentDescription="@string/start" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnSwitchCamera"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            app:fabSize="mini"
+            app:srcCompat="@drawable/ic_flip"
+            app:tint="@color/cs_on_primary"
+            app:backgroundTint="@color/cs_primary"
+            android:contentDescription="@string/switch_camera" />
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="20dp"
+            app:fabSize="mini"
+            app:srcCompat="@drawable/ic_tune"
+            app:tint="@color/cs_on_primary"
+            app:backgroundTint="@color/cs_primary"
+            android:contentDescription="@string/settings_button" />
+    </LinearLayout>
+
+    <!-- Modo ahorro: capa negra que se activa tocando el preview -->
+    <View
+        android:id="@+id/dimScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#F2000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone" />
+</FrameLayout>
