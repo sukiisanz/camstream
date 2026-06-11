@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Paleta central de CamStream. Para re-tematizar la app con los colores
+  del logo basta con tocar los tres primeros valores.
+-->
+<resources>
+    <color name="cs_primary">#B39DDB</color>      <!-- color de marca (botones) -->
+    <color name="cs_on_primary">#1C1B22</color>   <!-- iconos sobre el color de marca -->
+    <color name="cs_background">#000000</color>   <!-- fondo de la app -->
+
+    <color name="cs_pill">#CC1C1B22</color>       <!-- fondo translúcido de píldoras -->
+    <color name="cs_text">#FFFFFF</color>
+
+    <!-- colores de estado -->
+    <color name="cs_stopped">#9E9E9E</color>
+    <color name="cs_waiting">#FFB300</color>
+    <color name="cs_wifi">#4CAF50</color>
+    <color name="cs_usb">#42A5F5</color>
+    <color name="cs_live">#FF1744</color>
+</resources>
