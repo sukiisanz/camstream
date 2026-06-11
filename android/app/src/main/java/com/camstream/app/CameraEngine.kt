@@ -94,9 +94,19 @@ class CameraEngine(context: Context) {
                     val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
                         targets.forEach { addTarget(it) }
                         set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(fps, fps))
+                        // CONTINUOUS_PICTURE reenfoca más rápido y agresivo que
+                        // CONTINUOUS_VIDEO; para webcam (sujeto casi estático)
+                        // gana en nitidez sin transiciones molestas.
                         set(
                             CaptureRequest.CONTROL_AF_MODE,
-                            CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                            CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
+                        )
+                        // La estabilización electrónica (que algunos fabricantes
+                        // activan sola al grabar) recorta y emborrona la imagen;
+                        // con el teléfono apoyado no aporta nada.
+                        set(
+                            CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
+                            CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF
                         )
                     }
                     newSession.setRepeatingRequest(request.build(), null, handler)

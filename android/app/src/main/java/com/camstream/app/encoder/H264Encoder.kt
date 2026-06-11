@@ -21,7 +21,7 @@ class H264Encoder(
     private val width: Int = 1280,
     private val height: Int = 720,
     private val fps: Int = 30,
-    private val bitrate: Int = 4_000_000,
+    private val bitrate: Int = 6_000_000,
     private val onSpsPps: (sps: ByteArray, pps: ByteArray) -> Unit,
     private val onFrame: (data: ByteArray, ptsUs: Long, isKeyFrame: Boolean) -> Unit,
 ) {
