@@ -1,5 +1,6 @@
 package com.camstream.app.encoder
 
+import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.opengl.EGL14
 import android.opengl.EGLConfig
@@ -9,6 +10,7 @@ import android.opengl.EGLExt
 import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
+import android.opengl.GLUtils
 import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
@@ -58,6 +60,16 @@ class GlPipe(
     private var uSaturation = 0
     private var outWidth = 0
     private var outHeight = 0
+
+    // Rótulo superpuesto (texto del usuario)
+    private var overlayProgram = 0
+    private var ovAPosition = 0
+    private var ovATexCoord = 0
+    private var overlayTexId = 0
+    private var overlayVertexBuffer: FloatBuffer? = null
+    private val overlayTexCoords: FloatBuffer = floatBufferOf(
+        0f, 1f, 1f, 1f, 0f, 0f, 1f, 0f,
+    )
 
     private val texMatrix = FloatArray(16)
     private val mvpMatrix = FloatArray(16)
@@ -132,7 +144,7 @@ class GlPipe(
         EGL14.eglQuerySurface(eglDisplay, eglSurface, EGL14.EGL_HEIGHT, size, 0)
         outHeight = size[0]
 
-        program = buildProgram()
+        program = buildProgram(MAIN_VERTEX_SHADER, MAIN_FRAGMENT_SHADER)
         aPosition = GLES20.glGetAttribLocation(program, "aPosition")
         aTexCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
         uMvp = GLES20.glGetUniformLocation(program, "uMvp")
@@ -154,10 +166,65 @@ class GlPipe(
             GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR,
         )
 
+        overlayProgram = buildProgram(OVERLAY_VERTEX_SHADER, OVERLAY_FRAGMENT_SHADER)
+        ovAPosition = GLES20.glGetAttribLocation(overlayProgram, "aPosition")
+        ovATexCoord = GLES20.glGetAttribLocation(overlayProgram, "aTexCoord")
+
         surfaceTexture = SurfaceTexture(textureId)
         surfaceTexture.setDefaultBufferSize(srcWidth, srcHeight)
         cameraSurface = Surface(surfaceTexture)
         surfaceTexture.setOnFrameAvailableListener({ drawFrame() }, handler)
+    }
+
+    /**
+     * Cambia (o quita, con null) el rótulo superpuesto. anchor: 0 izquierda,
+     * 1 centro, 2 derecha; siempre en la franja inferior del video.
+     */
+    fun setOverlay(bitmap: Bitmap?, anchor: Int) {
+        handler.post {
+            if (overlayTexId != 0) {
+                GLES20.glDeleteTextures(1, intArrayOf(overlayTexId), 0)
+                overlayTexId = 0
+            }
+            overlayVertexBuffer = null
+            if (bitmap == null || released) {
+                bitmap?.recycle()
+                return@post
+            }
+            val tex = IntArray(1)
+            GLES20.glGenTextures(1, tex, 0)
+            overlayTexId = tex[0]
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTexId)
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR,
+            )
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR,
+            )
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE,
+            )
+            GLES20.glTexParameteri(
+                GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE,
+            )
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+
+            // Rectángulo en coordenadas NDC, margen del 4% de la altura
+            val w = 2f * bitmap.width / outWidth
+            val h = 2f * bitmap.height / outHeight
+            val marginPx = 0.04f * outHeight
+            val my = 2f * marginPx / outHeight
+            val mx = 2f * marginPx / outWidth
+            val y0 = -1f + my
+            val y1 = y0 + h
+            val (x0, x1) = when (anchor) {
+                1 -> -w / 2f to w / 2f
+                2 -> (1f - mx - w) to (1f - mx)
+                else -> (-1f + mx) to (-1f + mx + w)
+            }
+            overlayVertexBuffer = floatBufferOf(x0, y0, x1, y0, x0, y1, x1, y1)
+            bitmap.recycle()
+        }
     }
 
     private fun drawFrame() {
@@ -193,8 +260,29 @@ class GlPipe(
         GLES20.glDisableVertexAttribArray(aPosition)
         GLES20.glDisableVertexAttribArray(aTexCoord)
 
+        drawOverlay()
+
         EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, surfaceTexture.timestamp)
         EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+    }
+
+    private fun drawOverlay() {
+        val vertices = overlayVertexBuffer ?: return
+        if (overlayTexId == 0) return
+        GLES20.glUseProgram(overlayProgram)
+        GLES20.glEnable(GLES20.GL_BLEND)
+        // Los bitmaps de Android llevan alfa premultiplicado
+        GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, overlayTexId)
+        GLES20.glEnableVertexAttribArray(ovAPosition)
+        GLES20.glVertexAttribPointer(ovAPosition, 2, GLES20.GL_FLOAT, false, 0, vertices)
+        GLES20.glEnableVertexAttribArray(ovATexCoord)
+        GLES20.glVertexAttribPointer(ovATexCoord, 2, GLES20.GL_FLOAT, false, 0, overlayTexCoords)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        GLES20.glDisableVertexAttribArray(ovAPosition)
+        GLES20.glDisableVertexAttribArray(ovATexCoord)
+        GLES20.glDisable(GLES20.GL_BLEND)
     }
 
     fun release() {
@@ -206,6 +294,8 @@ class GlPipe(
                 surfaceTexture.setOnFrameAvailableListener(null)
                 cameraSurface.release()
                 surfaceTexture.release()
+                if (overlayTexId != 0) GLES20.glDeleteTextures(1, intArrayOf(overlayTexId), 0)
+                if (overlayProgram != 0) GLES20.glDeleteProgram(overlayProgram)
                 if (program != 0) GLES20.glDeleteProgram(program)
                 EGL14.eglMakeCurrent(
                     eglDisplay, EGL14.EGL_NO_SURFACE,
@@ -226,36 +316,9 @@ class GlPipe(
         thread.quitSafely()
     }
 
-    private fun buildProgram(): Int {
-        val vertex = """
-            attribute vec4 aPosition;
-            attribute vec4 aTexCoord;
-            uniform mat4 uMvp;
-            uniform mat4 uTexMatrix;
-            varying vec2 vTexCoord;
-            void main() {
-                gl_Position = uMvp * aPosition;
-                vTexCoord = (uTexMatrix * aTexCoord).xy;
-            }
-        """
-        val fragment = """
-            #extension GL_OES_EGL_image_external : require
-            precision mediump float;
-            varying vec2 vTexCoord;
-            uniform samplerExternalOES sTexture;
-            uniform float uBrightness;
-            uniform float uContrast;
-            uniform float uSaturation;
-            void main() {
-                vec3 c = texture2D(sTexture, vTexCoord).rgb;
-                c = (c - 0.5) * uContrast + 0.5 + uBrightness;
-                float gray = dot(c, vec3(0.299, 0.587, 0.114));
-                c = mix(vec3(gray), c, uSaturation);
-                gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
-            }
-        """
-        val vs = compileShader(GLES20.GL_VERTEX_SHADER, vertex)
-        val fs = compileShader(GLES20.GL_FRAGMENT_SHADER, fragment)
+    private fun buildProgram(vertexSrc: String, fragmentSrc: String): Int {
+        val vs = compileShader(GLES20.GL_VERTEX_SHADER, vertexSrc)
+        val fs = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentSrc)
         val prog = GLES20.glCreateProgram()
         GLES20.glAttachShader(prog, vs)
         GLES20.glAttachShader(prog, fs)
@@ -287,4 +350,51 @@ class GlPipe(
             .order(ByteOrder.nativeOrder())
             .asFloatBuffer()
             .apply { put(values); position(0) }
+
+    companion object {
+        private const val MAIN_VERTEX_SHADER = """
+            attribute vec4 aPosition;
+            attribute vec4 aTexCoord;
+            uniform mat4 uMvp;
+            uniform mat4 uTexMatrix;
+            varying vec2 vTexCoord;
+            void main() {
+                gl_Position = uMvp * aPosition;
+                vTexCoord = (uTexMatrix * aTexCoord).xy;
+            }
+        """
+        private const val MAIN_FRAGMENT_SHADER = """
+            #extension GL_OES_EGL_image_external : require
+            precision mediump float;
+            varying vec2 vTexCoord;
+            uniform samplerExternalOES sTexture;
+            uniform float uBrightness;
+            uniform float uContrast;
+            uniform float uSaturation;
+            void main() {
+                vec3 c = texture2D(sTexture, vTexCoord).rgb;
+                c = (c - 0.5) * uContrast + 0.5 + uBrightness;
+                float gray = dot(c, vec3(0.299, 0.587, 0.114));
+                c = mix(vec3(gray), c, uSaturation);
+                gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+            }
+        """
+        private const val OVERLAY_VERTEX_SHADER = """
+            attribute vec4 aPosition;
+            attribute vec4 aTexCoord;
+            varying vec2 vTexCoord;
+            void main() {
+                gl_Position = aPosition;
+                vTexCoord = aTexCoord.xy;
+            }
+        """
+        private const val OVERLAY_FRAGMENT_SHADER = """
+            precision mediump float;
+            varying vec2 vTexCoord;
+            uniform sampler2D sTexture;
+            void main() {
+                gl_FragColor = texture2D(sTexture, vTexCoord);
+            }
+        """
+    }
 }
