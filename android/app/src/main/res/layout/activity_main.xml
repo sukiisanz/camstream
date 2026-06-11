@@ -63,6 +63,18 @@
         android:gravity="center_vertical">
 
         <ImageButton
+            android:id="@+id/btnBattery"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:layout_marginEnd="20dp"
+            android:background="@drawable/bg_fab_gradient"
+            android:elevation="6dp"
+            android:scaleType="center"
+            android:src="@drawable/ic_battery"
+            android:tint="@color/cs_on_primary"
+            android:contentDescription="@string/battery_button" />
+
+        <ImageButton
             android:id="@+id/btnQr"
             android:layout_width="52dp"
             android:layout_height="52dp"

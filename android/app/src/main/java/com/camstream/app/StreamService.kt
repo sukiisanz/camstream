@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.Surface
+import com.camstream.app.encoder.GlPipe
 import com.camstream.app.encoder.H264Encoder
 import com.camstream.app.net.NsdAnnouncer
 import com.camstream.app.rtsp.RtspServer
@@ -40,6 +41,8 @@ class StreamService : Service() {
         val height: Int = 720,
         val measuredFps: Int = 0,
         val measuredKbps: Int = 0,
+        val rotationDeg: Int = 0,
+        val mirror: Boolean = false,
     )
 
     inner class LocalBinder : Binder() {
@@ -52,6 +55,7 @@ class StreamService : Service() {
     val status: StateFlow<Status> get() = _status
 
     private var encoder: H264Encoder? = null
+    private var glPipe: GlPipe? = null
     private var rtspServer: RtspServer? = null
     private var cameraEngine: CameraEngine? = null
     private var nsdAnnouncer: NsdAnnouncer? = null
@@ -71,15 +75,56 @@ class StreamService : Service() {
     fun setQuality(index: Int) {
         if (index == qualityIndex) return
         prefs.edit().putInt(KEY_QUALITY, index).apply()
-        if (_status.value.running) {
-            // Reinicia el pipeline con la nueva calidad
-            teardownPipeline()
-            _status.value = _status.value.copy(
-                running = false, clients = 0, usbClient = false,
-                mdnsRegistered = false, measuredFps = 0, measuredKbps = 0,
-            )
-            startStreaming()
+        restartIfRunning()
+    }
+
+    /** 0, 1, 2, 3 → 0°, 90°, 180°, 270°. Cambiarlo reinicia el pipeline. */
+    val rotationIndex: Int get() = prefs.getInt(KEY_ROTATION, 0)
+
+    fun setRotation(index: Int) {
+        if (index == rotationIndex) return
+        prefs.edit().putInt(KEY_ROTATION, index).apply()
+        restartIfRunning()
+    }
+
+    val mirror: Boolean get() = prefs.getBoolean(KEY_MIRROR, false)
+
+    fun setMirror(on: Boolean) {
+        prefs.edit().putBoolean(KEY_MIRROR, on).apply()
+        glPipe?.mirror = on
+        _status.value = _status.value.copy(mirror = on)
+    }
+
+    /** Ajustes de imagen en porcentaje 0..200, 100 = neutro. */
+    val brightnessPct: Int get() = prefs.getInt(KEY_BRIGHTNESS, 100)
+    val contrastPct: Int get() = prefs.getInt(KEY_CONTRAST, 100)
+    val saturationPct: Int get() = prefs.getInt(KEY_SATURATION, 100)
+
+    fun setImageAdjust(brightness: Int, contrast: Int, saturation: Int) {
+        prefs.edit()
+            .putInt(KEY_BRIGHTNESS, brightness)
+            .putInt(KEY_CONTRAST, contrast)
+            .putInt(KEY_SATURATION, saturation)
+            .apply()
+        applyImageAdjust()
+    }
+
+    private fun applyImageAdjust() {
+        glPipe?.let { pipe ->
+            pipe.brightness = (brightnessPct - 100) / 200f   // -0.5 .. 0.5
+            pipe.contrast = 0.5f + contrastPct / 200f        //  0.5 .. 1.5
+            pipe.saturation = saturationPct / 100f           //  0 .. 2
         }
+    }
+
+    private fun restartIfRunning() {
+        if (!_status.value.running) return
+        teardownPipeline()
+        _status.value = _status.value.copy(
+            running = false, clients = 0, usbClient = false,
+            mdnsRegistered = false, measuredFps = 0, measuredKbps = 0,
+        )
+        startStreaming()
     }
 
     // Estadísticas en vivo (fps y bitrate reales, ventana de 1 s)
@@ -126,9 +171,13 @@ class StreamService : Service() {
                 onKeyFrameRequest = { encoder?.requestKeyFrame() },
             )
             val (width, height, bitrate) = qualityFor(qualityIndex)
+            val rotationDeg = rotationIndex * 90
+            val swap = rotationIndex % 2 == 1
+            val encWidth = if (swap) height else width
+            val encHeight = if (swap) width else height
             statFrames = 0; statBytes = 0; statWindowStart = 0
             val newEncoder = H264Encoder(
-                width = width, height = height, bitrate = bitrate,
+                width = encWidth, height = encHeight, bitrate = bitrate,
                 onSpsPps = { sps, pps -> server.setSpsPps(sps, pps) },
                 onFrame = { data, ptsUs, isKey ->
                     trackStats(data.size)
@@ -141,6 +190,15 @@ class StreamService : Service() {
             encoder = newEncoder
             rtspServer = server
 
+            // Etapa OpenGL: aplica giro/espejo/ajustes entre cámara y encoder
+            glPipe = GlPipe(
+                srcWidth = width, srcHeight = height,
+                outputSurface = newEncoder.inputSurface,
+                rotationDeg = rotationDeg,
+                mirror = mirror,
+            )
+            applyImageAdjust()
+
             startCamera(_status.value.backCamera)
 
             val announcer = NsdAnnouncer(this, RtspServer.DEFAULT_PORT)
@@ -152,8 +210,10 @@ class StreamService : Service() {
             _status.value = _status.value.copy(
                 running = true,
                 localIp = findLocalIp(),
-                width = width,
-                height = height,
+                width = encWidth,
+                height = encHeight,
+                rotationDeg = rotationDeg,
+                mirror = mirror,
                 error = null,
             )
         } catch (e: Exception) {
@@ -198,7 +258,7 @@ class StreamService : Service() {
 
     private fun currentTargets(): List<Surface> {
         val targets = mutableListOf<Surface>()
-        encoder?.inputSurface?.let { targets.add(it) }
+        glPipe?.cameraSurface?.let { targets.add(it) }
         previewSurface?.takeIf { it.isValid }?.let { targets.add(it) }
         return targets
     }
@@ -215,6 +275,8 @@ class StreamService : Service() {
         cameraEngine = null
         rtspServer?.stop()
         rtspServer = null
+        glPipe?.release()
+        glPipe = null
         encoder?.stop()
         encoder = null
     }
@@ -273,6 +335,11 @@ class StreamService : Service() {
         private const val CHANNEL_ID = "camstream"
         private const val NOTIFICATION_ID = 1
         private const val KEY_QUALITY = "quality"
+        private const val KEY_ROTATION = "rotation"
+        private const val KEY_MIRROR = "mirror"
+        private const val KEY_BRIGHTNESS = "brightness"
+        private const val KEY_CONTRAST = "contrast"
+        private const val KEY_SATURATION = "saturation"
         const val ACTION_STOP = "com.camstream.app.STOP"
     }
 }
