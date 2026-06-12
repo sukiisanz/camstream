@@ -11,6 +11,7 @@
     <color name="cs_background">#000000</color>   <!-- fondo de la app -->
 
     <color name="cs_pill">#CC10222B</color>       <!-- píldoras translúcidas (azul noche) -->
+    <color name="cs_button_dark">#1E3038</color>  <!-- botones secundarios planos -->
     <color name="cs_text">#FFFFFF</color>
 
     <!-- colores de estado -->

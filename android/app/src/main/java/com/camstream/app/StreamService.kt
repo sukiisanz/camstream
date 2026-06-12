@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -200,6 +201,18 @@ class StreamService : Service() {
 
     override fun onBind(intent: Intent?): IBinder = binder
 
+    /** Si la Activity se va y no estamos transmitiendo, el servicio muere. */
+    override fun onUnbind(intent: Intent?): Boolean {
+        if (!_status.value.running) stopSelf()
+        return false
+    }
+
+    /** Usuario desliza la app fuera de recientes: paramos todo (batería). */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stopStreaming()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopStreaming()
@@ -247,6 +260,7 @@ class StreamService : Service() {
                 mirror = mirror,
             )
             applyImageAdjust()
+            previewSurface?.takeIf { it.isValid }?.let { glPipe?.setPreviewSurface(it) }
 
             startCamera(_status.value.backCamera)
 
@@ -288,12 +302,13 @@ class StreamService : Service() {
         if (_status.value.running) startCamera(back)
     }
 
-    /** La Activity entrega aquí el Surface del preview (o null al irse). */
+    /**
+     * La Activity entrega aquí el Surface del preview (o null al irse).
+     * Va a la etapa OpenGL, que pinta en él lo mismo que se transmite.
+     */
     fun setPreviewSurface(surface: Surface?) {
         previewSurface = surface
-        if (_status.value.running) {
-            cameraEngine?.updateTargets(currentTargets()) { msg -> reportError(msg) }
-        }
+        glPipe?.setPreviewSurface(surface)
     }
 
     private fun startCamera(back: Boolean) {
@@ -306,12 +321,7 @@ class StreamService : Service() {
         engine.start(cameraId, currentTargets(), fps = 30) { msg -> reportError(msg) }
     }
 
-    private fun currentTargets(): List<Surface> {
-        val targets = mutableListOf<Surface>()
-        glPipe?.cameraSurface?.let { targets.add(it) }
-        previewSurface?.takeIf { it.isValid }?.let { targets.add(it) }
-        return targets
-    }
+    private fun currentTargets(): List<Surface> = listOfNotNull(glPipe?.cameraSurface)
 
     private fun reportError(message: String) {
         Log.e(TAG, message)
@@ -352,11 +362,23 @@ class StreamService : Service() {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
+        val stopIntent = PendingIntent.getService(
+            this, 1,
+            Intent(this, StreamService::class.java).setAction(ACTION_STOP),
+            PendingIntent.FLAG_IMMUTABLE
+        )
         val notification: Notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(getString(R.string.notification_text))
             .setContentIntent(contentIntent)
+            .addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(this, R.drawable.ic_stop),
+                    getString(R.string.stop),
+                    stopIntent
+                ).build()
+            )
             .setOngoing(true)
             .build()
         if (Build.VERSION.SDK_INT >= 30) {
