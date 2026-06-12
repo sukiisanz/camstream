@@ -36,7 +36,7 @@ jobs:
         include:
           - os: windows-latest
             artifact: camstream-receiver-windows
-            binary: dist/*.exe
+            binary: dist/camstream-receiver.exe
           - os: ubuntu-latest
             artifact: camstream-receiver-linux
             binary: dist/camstream-receiver-linux.tar.gz
@@ -64,12 +64,11 @@ jobs:
         working-directory: receiver
         run: python -m PyInstaller --onefile --console --name camstream-receiver camstream_receiver.py
 
-      - name: Build executables (Windows, con GUI)
+      # En Windows la ventana ES el programa: un único exe, sin consola.
+      - name: Build executable (Windows, GUI)
         if: runner.os == 'Windows'
         working-directory: receiver
-        run: |
-          python -m PyInstaller --onefile --console --icon icon.ico --name camstream-receiver camstream_receiver.py
-          python -m PyInstaller --onefile --windowed --icon icon.ico --add-data "icon.ico;." --name camstream-receiver-gui camstream_gui_win.py
+        run: python -m PyInstaller --onefile --windowed --icon icon.ico --add-data "icon.ico;." --name camstream-receiver camstream_gui_win.py
 
       # El ZIP de los artifacts pierde el permiso de ejecución; un tar.gz
       # dentro del ZIP lo conserva (tar -xzf y listo).

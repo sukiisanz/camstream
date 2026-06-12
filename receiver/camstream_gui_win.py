@@ -40,11 +40,33 @@ COLOR_ERROR = "#FF1744"
 
 DEFAULT_PORT = 8554
 
-OBS_DLL = os.path.join(
-    os.environ.get("ProgramFiles", r"C:\Program Files"),
-    "obs-studio", "data", "obs-plugins", "win-dshow",
-    "obs-virtualcam-module64.dll",
-)
+OBS_CLSID = r"SOFTWARE\Classes\CLSID\{A3FCE0F5-3493-419F-958A-ABA1250EC20B}"
+
+
+def obs_installed():
+    """OBS puede estar en rutas distintas según versión e instalador;
+    con que aparezca una señal (carpeta o registro), damos por bueno."""
+    for base in (os.environ.get("ProgramFiles"),
+                 os.environ.get("ProgramFiles(x86)")):
+        if base and os.path.isdir(os.path.join(base, "obs-studio")):
+            return True
+    try:
+        import winreg
+    except ImportError:
+        return False
+    keys = (
+        OBS_CLSID,  # el driver 'OBS Virtual Camera' registrado
+        r"SOFTWARE\OBS Studio",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\OBS Studio",
+    )
+    for root in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        for key in keys:
+            try:
+                winreg.CloseKey(winreg.OpenKey(root, key))
+                return True
+            except OSError:
+                pass
+    return False
 
 # Mismo contenido que setup-windows.ps1, lanzado elevado desde la GUI
 PS_SETUP = r'''
@@ -193,7 +215,7 @@ class ReceiverApp:
 
     def system_checks(self):
         return [
-            ("Cámara virtual (OBS Studio)", os.path.exists(OBS_DLL), True),
+            ("Cámara virtual (OBS Studio)", obs_installed(), True),
             ("Video (ffmpeg)", bool(shutil.which("ffmpeg")), True),
             ("Cable USB (adb)", bool(shutil.which("adb")), False),
         ]
@@ -228,12 +250,13 @@ class ReceiverApp:
     def on_connect(self):
         if self.running:
             return
+        # Las comprobaciones solo avisan: nunca bloquean el intento de
+        # conexión (la detección puede fallar aunque todo esté instalado).
         missing = [n for n, ok, req in self.system_checks() if req and not ok]
         if missing:
-            self.set_status(COLOR_ERROR,
-                            f"Falta: {', '.join(missing)}. Usa el botón "
-                            "«Instalar dependencias» de abajo.")
-            return
+            self.set_status(COLOR_WAITING,
+                            f"No detecto: {', '.join(missing)} — intento "
+                            "conectar igualmente…")
         self.running = True
         self.set_buttons(False, True)
         threading.Thread(target=self.connection_loop, daemon=True).start()
