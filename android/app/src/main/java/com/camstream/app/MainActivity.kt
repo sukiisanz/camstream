@@ -11,7 +11,6 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.os.Build
 import android.os.Bundle
@@ -114,14 +113,16 @@ class MainActivity : AppCompatActivity() {
 
         previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(texture: SurfaceTexture, w: Int, h: Int) {
-                texture.setDefaultBufferSize(1280, 720)
-                configureTransform(w, h)
+                // Buffer al tamaño real de la vista: la etapa OpenGL mide el
+                // surface cada frame y encaja el video con barras, así que
+                // aquí no hace falta (ni conviene) ninguna matriz de ajuste.
+                texture.setDefaultBufferSize(w, h)
                 previewSurface = Surface(texture)
                 service?.setPreviewSurface(previewSurface)
             }
 
             override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, w: Int, h: Int) {
-                configureTransform(w, h)
+                texture.setDefaultBufferSize(w, h)
             }
 
             override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
@@ -343,26 +344,6 @@ class MainActivity : AppCompatActivity() {
             if (matrix.get(i % size, i / size)) Color.BLACK else Color.WHITE
         }
         return Bitmap.createBitmap(pixels, size, size, Bitmap.Config.RGB_565)
-    }
-
-    /**
-     * El buffer del preview ya llega derecho desde la etapa OpenGL (con
-     * giro, espejo, ajustes y rótulo aplicados): solo hay que encajarlo
-     * en la pantalla sin deformarlo.
-     */
-    private fun configureTransform(viewWidth: Int, viewHeight: Int) {
-        if (viewWidth == 0 || viewHeight == 0) return
-        val bufferW = 1280f
-        val bufferH = 720f
-        val scale = minOf(viewWidth / bufferW, viewHeight / bufferH)
-        val matrix = Matrix()
-        matrix.setScale(
-            scale * bufferW / viewWidth,
-            scale * bufferH / viewHeight,
-            viewWidth / 2f,
-            viewHeight / 2f,
-        )
-        previewView.setTransform(matrix)
     }
 
     private fun requestPermissionsAndBind() {
